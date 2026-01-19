@@ -1,6 +1,6 @@
 import safenet.jcprov.*;
 import safenet.jcprov.constants.*;
-import safenet.jcprov.params.*;
+
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -15,30 +15,32 @@ import java.io.File;
  * java StoreDekData [options]
  * 
  * Options:
- * -s, --slot <slotId> HSM Slot ID (REQUIRED)
- * -p, --password <pwd> User Password (REQUIRED, or prompts if interactive)
- * -kl, --kek-label <label> KEK (Master Key) Label (REQUIRED)
- * -dl, --dek-label <label> Label for DEK CKO_DATA object (REQUIRED)
- * -f, --file <file> Path to DEK binary file (REQUIRED)
- * -v, --verify Verification Mode: Read existing DEK, show encrypted data, and
- * verify.
- * -q, --quiet Quiet Mode: Skip "Press Enter" prompts.
+ * -s, --slot <slotId> HSM Slot ID (Required)
+ * -p, --password <pwd> User Password (Required, interactive prompt if missing)
+ * -kl, --kek-label <label> KEK (Master Key) Label (Required)
+ * -dl, --dek-label <label> DEK CKO_DATA Object Label (Required)
+ * -f, --file <file> DEK Binary File Path (Required)
+ * -q, --quiet Quiet Mode: skips "Enter" prompts and hides details.
  * -h, --help Show this help message.
  */
 public class StoreDekData {
 
-    private static Long slotId = null;
-    private static String password = null;
-    private static String kekLabel = null;
-    private static String dekLabel = null;
-    private static String dekFilePath = null;
-    private static boolean verboseMode = false;
-    private static boolean quietMode = false;
+    private Long slotId = null;
+    private String password = null;
+    private String kekLabel = null;
+    private String dekLabel = null;
+    private String dekFilePath = null;
+    private boolean quietMode = false;
 
-    // Helper for console input
-    private static Console console = System.console();
+    // Console input helper
+    private Console console = System.console();
 
     public static void main(String[] args) {
+        StoreDekData program = new StoreDekData();
+        program.run(args);
+    }
+
+    public void run(String[] args) {
         // Parse arguments
         parseArgs(args);
 
@@ -62,9 +64,18 @@ public class StoreDekData {
             missing = true;
             extraMsg.append("Error: DEK File Path (-f) is required.\n");
         }
+        if (password == null) { // Password required
+            if (console != null && !quietMode) {
+                char[] pwdChars = console.readPassword("Enter HSM Password: ");
+                if (pwdChars != null) {
+                    password = new String(pwdChars);
+                }
+            }
+        }
+
         if (password == null) {
             missing = true;
-            extraMsg.append("Error: Password (-p) is required.\n");
+            extraMsg.append("Error: Password (-p) is required (or interactive input unavailable).\n");
         }
 
         if (missing) {
@@ -73,17 +84,20 @@ public class StoreDekData {
             System.exit(1);
         }
 
+        if (quietMode) {
+            // verboseMode removed
+        }
+
         CK_SESSION_HANDLE session = new CK_SESSION_HANDLE();
 
         try {
             System.out.println("=== StoreDekData Pilot Program ===");
-            if (verboseMode)
-                System.out.println("Mode: VERBOSE (Showing Plaintext/Decrypted values)");
-            if (quietMode)
-                System.out.println("Mode: QUIET (Skipping prompts)");
+            if (quietMode) {
+                System.out.println("Mode: Quiet (Prompts skipped)");
+            }
 
-            // 1. Initialize & Login
-            step("Initialize and Login");
+            // 1. Initialization and Login
+            step("Initialization and Login");
             initialize();
             session = openSession(slotId);
             login(session);
@@ -93,55 +107,55 @@ public class StoreDekData {
             CK_OBJECT_HANDLE hKek = findKey(session, kekLabel);
             System.out.println("KEK Found. Label: " + kekLabel + ", Handle: " + hKek);
 
-            // --- CREATION FLOW (Always Run) ---
+            // --- Creation Flow (Always executed) ---
 
             // 3. Read DEK Plaintext
-            step("Read DEK Plaintext from file");
+            step("Read DEK Plaintext from File");
             File dekFile = new File(dekFilePath);
             if (!dekFile.exists()) {
-                throw new RuntimeException("DEK file not found: " + dekFilePath);
+                throw new RuntimeException("DEK File not found: " + dekFilePath);
             }
             byte[] dekPlaintext = Files.readAllBytes(Paths.get(dekFilePath));
             System.out.println("Read " + dekPlaintext.length + " bytes from " + dekFilePath);
-            if (verboseMode)
-                printHex("Plaintext DEK", dekPlaintext);
+            // verbose printHex removed
 
             // 4. Encrypt DEK
             step("Encrypt DEK with KEK");
             byte[] encryptedDek = encrypt(session, hKek, dekPlaintext);
-            printHex("Encrypted DEK", encryptedDek);
+            System.out.println("DEK Encryption Complete (" + encryptedDek.length + " bytes)");
 
             // 5. Store Ciphertext
             step("Store Encrypted DEK as CKO_DATA");
             storeData(session, dekLabel, encryptedDek);
-            System.out.println("CKO_DATA stored successfully with label: " + dekLabel);
+            System.out.println("CKO_DATA Stored Successfully. Label: " + dekLabel);
 
-            // 6. Read Ciphertext (Always do this to verify storage/retrieval)
+            // 6. Read Ciphertext (Always performed for verification)
             step("Read CKO_DATA from HSM");
 
             byte[] retrievedCiphertext = readData(session, dekLabel);
-            System.out.println("Read CKO_DATA with Label: " + dekLabel);
-            printHex("Encrypted DEK (CKO_DATA.VALUE)", retrievedCiphertext); // Always show
+            System.out.println("CKO_DATA Read Successfully. Label: " + dekLabel);
 
             // 7. Decrypt
             step("Decrypt Ciphertext with KEK");
             byte[] decryptedDek = decrypt(session, hKek, retrievedCiphertext);
-            if (verboseMode)
-                printHex("Decrypted DEK", decryptedDek);
+            // verbose printHex removed
 
             // 8. Verify
             step("Verification");
 
             byte[] original = dekPlaintext;
             if (Arrays.equals(original, decryptedDek)) {
-                System.out.println("SUCCESS: Decrypted data matches original DEK.");
+                System.out.println("Success: Decrypted data matches original DEK.");
             } else {
-                System.err.println("FAILURE: Decrypted data does NOT match original DEK.");
+                System.err.println("Failure: Decrypted data does NOT match original DEK.");
+                // Ensure we exit with error code on failure
+                System.exit(1);
             }
 
         } catch (Exception e) {
             System.err.println("Error: " + e.getMessage());
             e.printStackTrace();
+            System.exit(1);
         } finally {
             cleanup(session);
         }
@@ -149,7 +163,7 @@ public class StoreDekData {
 
     // --- Core Functions ---
 
-    private static void parseArgs(String[] args) {
+    private void parseArgs(String[] args) {
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
             if (arg.equals("-s") || arg.equals("--slot")) {
@@ -167,8 +181,6 @@ public class StoreDekData {
             } else if (arg.equals("-f") || arg.equals("--file")) {
                 if (i + 1 < args.length)
                     dekFilePath = args[++i];
-            } else if (arg.equals("-v") || arg.equals("--verbose")) {
-                verboseMode = true;
             } else if (arg.equals("-q") || arg.equals("--quiet")) {
                 quietMode = true;
             } else if (arg.equals("-h") || arg.equals("--help")) {
@@ -178,37 +190,35 @@ public class StoreDekData {
         }
     }
 
-    private static void printUsage() {
+    private void printUsage() {
         System.out.println("Usage: java StoreDekData [options]");
         System.out.println("");
         System.out.println("Options:");
-        System.out.println("  -s,  --slot <slotId>       HSM Slot ID (REQUIRED)");
-        System.out.println("  -p,  --password <pwd>      User Password (REQUIRED)");
-        System.out.println("  -kl, --kek-label <label>   KEK (Master Key) Label (REQUIRED)");
-        System.out.println("  -dl, --dek-label <label>   Label for DEK CKO_DATA object (REQUIRED)");
-        System.out.println("  -f,  --file <file>         Path to DEK binary file (REQUIRED)");
-        System.out.println("  -v,  --verbose             Verbose Mode: Show Plaintext and Decrypted DEK values.");
-        System.out.println("  -q,  --quiet               Quiet Mode: Skip 'Press Enter' prompts.");
-        System.out.println("  -h,  --help                Show this help message.");
+        System.out.println("  -s,  --slot <slotId>       HSM Slot ID (Required)");
+        System.out.println("  -p,  --password <pwd>      User Password (Required, prompts if missing)");
+        System.out.println("  -kl, --kek-label <label>   KEK (Master Key) Label (Required)");
+        System.out.println("  -dl, --dek-label <label>   DEK CKO_DATA Object Label (Required)");
+        System.out.println("  -f,  --file <file>         DEK Binary File Path (Required)");
+        System.out.println("  -q,  --quiet               Quiet mode (reduce output, skip prompts)");
+        System.out.println("  -h,  --help                Show this help message");
     }
 
-    private static void initialize() throws Exception {
+    private void initialize() throws Exception {
         CryptokiEx.C_Initialize(new CK_C_INITIALIZE_ARGS(CKF.OS_LOCKING_OK));
     }
 
-    private static CK_SESSION_HANDLE openSession(long slotId) throws Exception {
+    private CK_SESSION_HANDLE openSession(long slotId) throws Exception {
         CK_SESSION_HANDLE session = new CK_SESSION_HANDLE();
         CryptokiEx.C_OpenSession(slotId, CKF.RW_SESSION, null, null, session);
         return session;
     }
 
-    private static void login(CK_SESSION_HANDLE session) throws Exception {
-        // Password is now enforced to be non-null by check in main()
+    private void login(CK_SESSION_HANDLE session) throws Exception {
         CryptokiEx.C_Login(session, CKU.USER, password.getBytes(StandardCharsets.US_ASCII), password.length());
-        System.out.println("Login Successful.");
+        System.out.println("Login successful.");
     }
 
-    private static CK_OBJECT_HANDLE findKey(CK_SESSION_HANDLE session, String label) throws Exception {
+    private CK_OBJECT_HANDLE findKey(CK_SESSION_HANDLE session, String label) throws Exception {
         CK_ATTRIBUTE[] template = {
                 new CK_ATTRIBUTE(CKA.CLASS, CKO.SECRET_KEY),
                 new CK_ATTRIBUTE(CKA.LABEL, label.getBytes(StandardCharsets.UTF_8))
@@ -221,8 +231,8 @@ public class StoreDekData {
         return hKey;
     }
 
-    private static byte[] encrypt(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE hKey, byte[] data) throws Exception {
-        byte[] iv = new byte[16];
+    private byte[] encrypt(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE hKey, byte[] data) throws Exception {
+        byte[] iv = new byte[16]; // Zero IV for pilot
         CK_MECHANISM mechanism = new CK_MECHANISM(CKM.AES_CBC_PAD, iv);
 
         CryptokiEx.C_EncryptInit(session, mechanism, hKey);
@@ -236,7 +246,7 @@ public class StoreDekData {
         return Arrays.copyOf(cipherText, (int) outLen.value);
     }
 
-    private static void storeData(CK_SESSION_HANDLE session, String label, byte[] value) throws Exception {
+    private void storeData(CK_SESSION_HANDLE session, String label, byte[] value) throws Exception {
         // First delete if exists
         try {
             CK_OBJECT_HANDLE existing = findDataHandle(session, label);
@@ -259,7 +269,7 @@ public class StoreDekData {
         CryptokiEx.C_CreateObject(session, template, template.length, hData);
     }
 
-    private static byte[] readData(CK_SESSION_HANDLE session, String label) throws Exception {
+    private byte[] readData(CK_SESSION_HANDLE session, String label) throws Exception {
         CK_OBJECT_HANDLE hData = findDataHandle(session, label);
         if (!hData.isValidHandle()) {
             throw new RuntimeException("Data object not found: " + label);
@@ -278,7 +288,7 @@ public class StoreDekData {
         return data;
     }
 
-    private static CK_OBJECT_HANDLE findDataHandle(CK_SESSION_HANDLE session, String label) throws Exception {
+    private CK_OBJECT_HANDLE findDataHandle(CK_SESSION_HANDLE session, String label) throws Exception {
         CK_ATTRIBUTE[] template = {
                 new CK_ATTRIBUTE(CKA.CLASS, CKO.DATA),
                 new CK_ATTRIBUTE(CKA.LABEL, label.getBytes(StandardCharsets.UTF_8))
@@ -286,7 +296,7 @@ public class StoreDekData {
         return findObject(session, template);
     }
 
-    private static byte[] decrypt(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE hKey, byte[] ciphertext)
+    private byte[] decrypt(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE hKey, byte[] ciphertext)
             throws Exception {
         byte[] iv = new byte[16];
         CK_MECHANISM mechanism = new CK_MECHANISM(CKM.AES_CBC_PAD, iv);
@@ -304,50 +314,43 @@ public class StoreDekData {
 
     // --- Utilities ---
 
-    private static CK_OBJECT_HANDLE findObject(CK_SESSION_HANDLE session, CK_ATTRIBUTE[] template) throws Exception {
+    private CK_OBJECT_HANDLE findObject(CK_SESSION_HANDLE session, CK_ATTRIBUTE[] template) throws Exception {
         CryptokiEx.C_FindObjectsInit(session, template, template.length);
-        CK_OBJECT_HANDLE[] foundInfo = { new CK_OBJECT_HANDLE() };
+        CK_OBJECT_HANDLE[] foundInfo = new CK_OBJECT_HANDLE[10]; // Fetch up to 10 to check for duplicates
         LongRef foundCount = new LongRef();
 
-        CryptokiEx.C_FindObjects(session, foundInfo, 1, foundCount);
+        CryptokiEx.C_FindObjects(session, foundInfo, foundInfo.length, foundCount);
         CryptokiEx.C_FindObjectsFinal(session);
 
-        if (foundCount.value == 1) {
-            return foundInfo[0];
+        if (foundCount.value == 0) {
+            return new CK_OBJECT_HANDLE();
         }
-        return new CK_OBJECT_HANDLE();
+
+        if (foundCount.value > 1) {
+            System.err.println(
+                    "Warning: " + foundCount.value + " objects found with same criteria. Using the first one.");
+        }
+
+        return foundInfo[0];
     }
 
-    private static void cleanup(CK_SESSION_HANDLE session) {
+    private void cleanup(CK_SESSION_HANDLE session) {
         try {
-            Cryptoki.C_Logout(session);
-            Cryptoki.C_CloseSession(session);
+            if (session != null && session.isValidHandle()) {
+                Cryptoki.C_Logout(session);
+                Cryptoki.C_CloseSession(session);
+            }
             Cryptoki.C_Finalize(null);
         } catch (Exception ignored) {
         }
     }
 
-    private static void step(String description) {
+    private void step(String description) {
         System.out.println("\n--------------------------------------------------");
         System.out.println("STEP: " + description);
         System.out.println("--------------------------------------------------");
         if (!quietMode && console != null) {
             console.readLine("Press Enter to continue...");
         }
-    }
-
-    private static String prompt(String message) {
-        if (console != null) {
-            return console.readLine(message);
-        }
-        return "";
-    }
-
-    private static void printHex(String label, byte[] data) {
-        System.out.print(label + ": ");
-        for (byte b : data) {
-            System.out.printf("%02X", b);
-        }
-        System.out.println();
     }
 }

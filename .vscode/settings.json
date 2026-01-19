@@ -1,0 +1,5 @@
+{
+    "java.project.referencedLibraries": [
+        "/opt/safenet/protecttoolkit7/ptk/lib/jcprov.jar"
+    ]
+}
