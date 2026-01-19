@@ -1,4 +1,4 @@
-# StoreDekData Pilot Program
+# StoreDekData Example Program
 
 PSE HSM을 사용하여 DEK(Data Encryption Key)를 KEK(Key Encryption Key)로 암호화하고, 이를 `CKO_DATA` 객체로 HSM에 저장/검증하는 Java CLI 프로그램입니다.
 
@@ -49,14 +49,10 @@ dd if=/dev/urandom of=dek.bin bs=32 count=1
 - `-kl`, `--kek-label <label>`: 암호화에 사용할 KEK (Master Key) 라벨
 - `-dl`, `--dek-label <label>`: 저장될 데이터 객체의 라벨
 - `-f`, `--file <file>`: 원본 DEK 바이너리 파일 경로
-- `-q`, `--quiet`: (선택) Quiet 모드. 중간 프롬프트를 생략하고 상세 출력을 숨깁니다.
 - `-h`, `--help`: 도움말 표시
 
 ### 실행 예시 (Example)
 ```bash
 # 기본 실행
 ./run.sh -p 1111 -s 0 -kl master_key -dl test_dek_01 -f dek.bin
-
-# Quiet 실행 (최소한의 출력)
-./run.sh -q -p 1111 -s 0 -kl master_key -dl test_dek_01 -f dek.bin
 ```

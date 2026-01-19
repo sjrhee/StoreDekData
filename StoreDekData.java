@@ -9,7 +9,7 @@ import java.io.Console;
 import java.io.File;
 
 /**
- * StoreDekData Pilot Program
+ * StoreDekData Example Program
  * 
  * Usage:
  * java StoreDekData [options]
@@ -30,7 +30,6 @@ public class StoreDekData {
     private String kekLabel = null;
     private String dekLabel = null;
     private String dekFilePath = null;
-    private boolean quietMode = false;
 
     // Console input helper
     private Console console = System.console();
@@ -44,57 +43,13 @@ public class StoreDekData {
         // Parse arguments
         parseArgs(args);
 
-        // Validation: Check required arguments
-        boolean missing = false;
-        StringBuilder extraMsg = new StringBuilder();
-
-        if (slotId == null) {
-            missing = true;
-            extraMsg.append("Error: Slot ID (-s) is required.\n");
-        }
-        if (kekLabel == null) {
-            missing = true;
-            extraMsg.append("Error: KEK Label (-kl) is required.\n");
-        }
-        if (dekLabel == null) {
-            missing = true;
-            extraMsg.append("Error: DEK Label (-dl) is required.\n");
-        }
-        if (dekFilePath == null) {
-            missing = true;
-            extraMsg.append("Error: DEK File Path (-f) is required.\n");
-        }
-        if (password == null) { // Password required
-            if (console != null && !quietMode) {
-                char[] pwdChars = console.readPassword("Enter HSM Password: ");
-                if (pwdChars != null) {
-                    password = new String(pwdChars);
-                }
-            }
-        }
-
-        if (password == null) {
-            missing = true;
-            extraMsg.append("Error: Password (-p) is required (or interactive input unavailable).\n");
-        }
-
-        if (missing) {
-            System.err.println(extraMsg.toString());
-            printUsage();
-            System.exit(1);
-        }
-
-        if (quietMode) {
-            // verboseMode removed
-        }
+        // Validation
+        validateArgs();
 
         CK_SESSION_HANDLE session = new CK_SESSION_HANDLE();
 
         try {
-            System.out.println("=== StoreDekData Pilot Program ===");
-            if (quietMode) {
-                System.out.println("Mode: Quiet (Prompts skipped)");
-            }
+            System.out.println("=== StoreDekData Example Program ===");
 
             // 1. Initialization and Login
             step("Initialization and Login");
@@ -107,8 +62,6 @@ public class StoreDekData {
             CK_OBJECT_HANDLE hKek = findKey(session, kekLabel);
             System.out.println("KEK Found. Label: " + kekLabel + ", Handle: " + hKek);
 
-            // --- Creation Flow (Always executed) ---
-
             // 3. Read DEK Plaintext
             step("Read DEK Plaintext from File");
             File dekFile = new File(dekFilePath);
@@ -117,12 +70,13 @@ public class StoreDekData {
             }
             byte[] dekPlaintext = Files.readAllBytes(Paths.get(dekFilePath));
             System.out.println("Read " + dekPlaintext.length + " bytes from " + dekFilePath);
-            // verbose printHex removed
+            printHex("DEK Plaintext", dekPlaintext);
 
             // 4. Encrypt DEK
             step("Encrypt DEK with KEK");
             byte[] encryptedDek = encrypt(session, hKek, dekPlaintext);
             System.out.println("DEK Encryption Complete (" + encryptedDek.length + " bytes)");
+            printHex("Encrypted DEK", encryptedDek);
 
             // 5. Store Ciphertext
             step("Store Encrypted DEK as CKO_DATA");
@@ -138,7 +92,7 @@ public class StoreDekData {
             // 7. Decrypt
             step("Decrypt Ciphertext with KEK");
             byte[] decryptedDek = decrypt(session, hKek, retrievedCiphertext);
-            // verbose printHex removed
+            printHex("Decrypted DEK", decryptedDek);
 
             // 8. Verify
             step("Verification");
@@ -163,6 +117,49 @@ public class StoreDekData {
 
     // --- Core Functions ---
 
+    // --- Core Functions ---
+
+    private void validateArgs() {
+        boolean missing = false;
+        StringBuilder extraMsg = new StringBuilder();
+
+        if (slotId == null) {
+            missing = true;
+            extraMsg.append("Error: Slot ID (-s) is required.\n");
+        }
+        if (kekLabel == null) {
+            missing = true;
+            extraMsg.append("Error: KEK Label (-kl) is required.\n");
+        }
+        if (dekLabel == null) {
+            missing = true;
+            extraMsg.append("Error: DEK Label (-dl) is required.\n");
+        }
+        if (dekFilePath == null) {
+            missing = true;
+            extraMsg.append("Error: DEK File Path (-f) is required.\n");
+        }
+        if (password == null) { // Password required
+            if (console != null) {
+                char[] pwdChars = console.readPassword("Enter HSM Password: ");
+                if (pwdChars != null) {
+                    password = new String(pwdChars);
+                }
+            }
+        }
+
+        if (password == null) {
+            missing = true;
+            extraMsg.append("Error: Password (-p) is required (or interactive input unavailable).\n");
+        }
+
+        if (missing) {
+            System.err.println(extraMsg.toString());
+            printUsage();
+            System.exit(1);
+        }
+    }
+
     private void parseArgs(String[] args) {
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
@@ -181,8 +178,6 @@ public class StoreDekData {
             } else if (arg.equals("-f") || arg.equals("--file")) {
                 if (i + 1 < args.length)
                     dekFilePath = args[++i];
-            } else if (arg.equals("-q") || arg.equals("--quiet")) {
-                quietMode = true;
             } else if (arg.equals("-h") || arg.equals("--help")) {
                 printUsage();
                 System.exit(0);
@@ -199,7 +194,6 @@ public class StoreDekData {
         System.out.println("  -kl, --kek-label <label>   KEK (Master Key) Label (Required)");
         System.out.println("  -dl, --dek-label <label>   DEK CKO_DATA Object Label (Required)");
         System.out.println("  -f,  --file <file>         DEK Binary File Path (Required)");
-        System.out.println("  -q,  --quiet               Quiet mode (reduce output, skip prompts)");
         System.out.println("  -h,  --help                Show this help message");
     }
 
@@ -316,7 +310,10 @@ public class StoreDekData {
 
     private CK_OBJECT_HANDLE findObject(CK_SESSION_HANDLE session, CK_ATTRIBUTE[] template) throws Exception {
         CryptokiEx.C_FindObjectsInit(session, template, template.length);
-        CK_OBJECT_HANDLE[] foundInfo = new CK_OBJECT_HANDLE[10]; // Fetch up to 10 to check for duplicates
+        CK_OBJECT_HANDLE[] foundInfo = new CK_OBJECT_HANDLE[10];
+        for (int i = 0; i < foundInfo.length; i++) {
+            foundInfo[i] = new CK_OBJECT_HANDLE();
+        }
         LongRef foundCount = new LongRef();
 
         CryptokiEx.C_FindObjects(session, foundInfo, foundInfo.length, foundCount);
@@ -349,8 +346,14 @@ public class StoreDekData {
         System.out.println("\n--------------------------------------------------");
         System.out.println("STEP: " + description);
         System.out.println("--------------------------------------------------");
-        if (!quietMode && console != null) {
-            console.readLine("Press Enter to continue...");
+    }
+
+    private void printHex(String label, byte[] data) {
+        System.out.println(label + ":");
+        StringBuilder sb = new StringBuilder();
+        for (byte b : data) {
+            sb.append(String.format("%02X", b));
         }
+        System.out.println(sb.toString());
     }
 }
