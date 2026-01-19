@@ -1,6 +1,6 @@
 # StoreDekData Pilot Program
 
-SafeNet HSM을 사용하여 DEK(Data Encryption Key)를 KEK(Key Encryption Key)로 암호화하고, 이를 `CKO_DATA` 객체로 HSM에 저장/검증하는 Java CLI 프로그램입니다.
+PSE HSM을 사용하여 DEK(Data Encryption Key)를 KEK(Key Encryption Key)로 암호화하고, 이를 `CKO_DATA` 객체로 HSM에 저장/검증하는 Java CLI 프로그램입니다.
 
 ## 기능 (Features)
 1. **암호화 및 저장**: 로컬 파일(`dek.bin` 등)에서 DEK를 읽어, HSM 내부의 KEK로 암호화한 후 `CKO_DATA` 객체로 저장합니다.
