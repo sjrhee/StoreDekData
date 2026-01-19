@@ -109,14 +109,12 @@ public class StoreDekData {
             // 4. Encrypt DEK
             step("Encrypt DEK with KEK");
             byte[] encryptedDek = encrypt(session, hKek, dekPlaintext);
-            printHex("Encrypted DEK", encryptedDek); // Always show
+            printHex("Encrypted DEK", encryptedDek);
 
             // 5. Store Ciphertext
             step("Store Encrypted DEK as CKO_DATA");
             storeData(session, dekLabel, encryptedDek);
             System.out.println("CKO_DATA stored successfully with label: " + dekLabel);
-
-            // --- VERIFICATION FLOW (Always Run) ---
 
             // 6. Read Ciphertext (Always do this to verify storage/retrieval)
             step("Read CKO_DATA from HSM");
