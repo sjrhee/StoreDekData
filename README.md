@@ -17,10 +17,11 @@ PSE HSM을 사용하여 DEK(Data Encryption Key)를 KEK(Key Encryption Key)로 �
 ### 1. KEK (Master Key) 생성
 HSM 내부에 KEK를 생성합니다. (예: Label=`master_key`, 256bit AES)
 ```bash
-# 슬롯 0에 'k01' 라벨을 가진 AES 256비트 키 생성 (비밀번호: 1111)
-ctkmu c -s 0 -u 1111 -n master_key -t aes -z 256 -a E D S V
+# 슬롯 0에 'master_key' 라벨을 가진 AES 256비트 키 생성 (비밀번호: 1111)
+ctkmu c -s 0 -u 1111 -n master_key -t aes -z 256 -a E D S V T X
 ```
 > **참고**: `ctkmu`는 PSE ptk 클라이언트 도구입니다.
+> **속성 설명 (-a)**: `E`(Encrypt/암호화), `D`(Decrypt/복호화), `S`(Sign/서명), `V`(Verify/검증), `T`(Sensitive/민감), `X`(Extractable/추출가능) 권한을 부여합니다.
 
 ### 2. DEK (Data Encryption Key) 파일 생성
 암호화할 원본 데이터 파일을 생성합니다. (예: 32바이트 바이너리)
