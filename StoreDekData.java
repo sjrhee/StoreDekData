@@ -20,7 +20,6 @@ import java.io.File;
  * -kl, --kek-label <label> KEK (Master Key) Label (Required)
  * -dl, --dek-label <label> DEK CKO_DATA Object Label (Required)
  * -f, --file <file> DEK Binary File Path (Required)
- * -q, --quiet Quiet Mode: skips "Enter" prompts and hides details.
  * -h, --help Show this help message.
  */
 public class StoreDekData {
@@ -114,10 +113,6 @@ public class StoreDekData {
             cleanup(session);
         }
     }
-
-    // --- Core Functions ---
-
-    // --- Core Functions ---
 
     private void validateArgs() {
         boolean missing = false;
